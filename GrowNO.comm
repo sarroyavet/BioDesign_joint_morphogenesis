@@ -1,0 +1,758 @@
+# OPTIMIZATION ALGORITHM
+# importing all the libraries necesary for the code
+
+import sys
+sys.path.append( '/home/salome_meca/V2019.0.3_universal/tools/Code_aster_stable-v144_smeca/lib/aster/Utilitai/' )
+from Utilitai.partition import *
+import numpy as np
+import pprint
+import json
+
+# function to establish the "biochemical influence"
+# (where we are not interested that the geometry get deformed)
+def BScal(d1,d2,Y):
+    x = (abs(Y)-d1)/d2
+    if x<0:
+        BSs = 1
+    elif x>1:
+        BSs = 0
+    else:
+        BSs = 0.006758446 + (0.985896 - 0.006758446)/(1 + (x/333.1427)**2.154144)**2830965
+    return BSs
+
+def expfunc(NOCTlim,NormO,a):
+    deltaoct = NOCTlim - NormO
+    # a = 0.016
+    b = 0.9
+    # c = 3*a
+    c = 0
+    ln = np.log
+    v = ln((1/b)-1)/a
+    iota = 1/(1+np.exp(v*(deltaoct-c)))
+    return iota
+#----------------------------------------------------------------------------------------------------------------------
+#    It is necessary to select "command by command" execution
+#    deactivating PAR_LOT option
+#    Document u1.03.02
+DEBUT(LANG='EN',
+      PAR_LOT='NON')
+
+#########################################################################
+#                        VARIABLES DEFINITION                           #
+#########################################################################
+#
+#Working directory
+Workdir = '#WORKDIR/'
+Workdirgen = '#GENWORKDIR/'
+jsonfile = '#jasonfile'
+sys.path.append(Workdirgen)
+import Pyfile.resVTK as vtkk
+import Pyfile.graphicconv as Grph
+import Pyfile.readUNV as Runv
+# 
+# IMPORT PARAMETERS 
+# from gen
+with open(Workdir+'param.json') as Fpara:
+    parameters = json.load(Fpara)
+# Growth step
+i = parameters['Gstp'] # growth step
+
+# from the problem definition
+# Opening JSON file of parameters
+with open(Workdir+jsonfile) as f:
+    # returns JSON object as a dictionary
+    ProblemData = json.load(f)
+
+# PROBLEM PARAMETERS
+# Load
+FF = ProblemData['Load_param']['Applied_force'] # Applied Force
+# Material
+Vmat = ProblemData['Mat_param']['poisson_morph_material'] # Poisson of the material
+Em = ProblemData['Mat_param']['Young_material'] # Young of the material
+Vcap = ProblemData['Mat_param']['poisson_capsule'] # Poisson of the capsule
+Ec = Em / ProblemData['AD_param']['theta'] # Young of the capsule
+# thermal
+alpha = parameters['Alpha']
+lamb = 6 #thermal condutivity
+# growth parameters
+lambdaa = ProblemData['AD_param']['lamda_mall_zone'] # determination of the length of the maleable zone
+aA1 = ProblemData['Geo_param']['a_sup'] # initial width of the piece
+aA2 = ProblemData['Geo_param']['a_inf'] # initial width of the piece
+mallzoneA1 = lambdaa*aA1 #size of the growth plate
+mallzoneA2 = lambdaa*aA2 #size of the growth plate
+grplte = ProblemData['AD_param']['gamma'] # height of the growth plate parameter
+NOCTlim = ProblemData['AD_param']['Normal_vm_lim'] # Limit of the normalized oct stress
+HYDTlim = ProblemData['AD_param']['normal_hydlim'] # Limit of the normalized hyd stress
+temp_ref = 0.0 # reference temperature for the thermal deformation
+aexpfunc = ProblemData['AD_param']['aexpfunc']
+
+# Unit for the files
+U = 10 # Para configurar los ficheros
+#
+# definition of the file paths
+path_def_mesh = Workdir+'MED_FILES/DEF'
+path_tmp_res = Workdir+'MED_FILES/RESU_MEC/'
+path_mec_res = Workdir+'MED_FILES/RESU_MEC/res_mec'
+
+#########################################################################
+#                                                                       #
+#                                   MAIN                                #
+#                                                                       #
+#########################################################################
+#
+#MATERIAL DEFINITION
+# Material with Thermal Expansion
+mat1 = DEFI_MATERIAU(ELAS=_F(E=Em, #steel for the rocker arm and the valve
+                             NU=Vmat,
+                             ALPHA=alpha),
+                     THER=_F(LAMBDA=lamb))
+
+mat2 = DEFI_MATERIAU(ELAS=_F(E=Ec, #capsule mat
+                             NU=Vcap,
+                             ALPHA=alpha),
+                     THER=_F(LAMBDA=lamb))
+
+####################### MESH READING #######################
+#
+DEFI_FICHIER(ACTION='ASSOCIER',
+             FICHIER=path_def_mesh+'/A1G'+str(i)+'.unv',
+             UNITE=U)
+
+A1 = LIRE_MAILLAGE(FORMAT='IDEAS',
+                   UNITE=U)
+DEFI_FICHIER(ACTION='LIBERER',
+             UNITE=U)
+
+U+=1
+DEFI_FICHIER(ACTION='ASSOCIER',
+             FICHIER=path_def_mesh+'/A2G'+str(i)+'.unv',
+             UNITE=U)
+
+A2 = LIRE_MAILLAGE(FORMAT='IDEAS',
+                   UNITE=U)
+DEFI_FICHIER(ACTION='LIBERER',
+             UNITE=U)
+
+U+=1
+DEFI_FICHIER(ACTION='ASSOCIER',
+             FICHIER=path_def_mesh+'/A5G'+str(i)+'.unv',
+             UNITE=U)
+
+A5 = LIRE_MAILLAGE(FORMAT='IDEAS',
+                   UNITE=U)
+DEFI_FICHIER(ACTION='LIBERER',
+             UNITE=U)
+
+# Mesh merging
+A1A2 = ASSE_MAILLAGE(MAILLAGE_1=A1,
+                    MAILLAGE_2=A2,
+                    OPERATION='SUPERPOSE')
+      
+MAIL_MEC = ASSE_MAILLAGE(MAILLAGE_1=A1A2,
+                         MAILLAGE_2=A5,
+                         OPERATION='SUPERPOSE')
+
+#Create GROUP OF NODES
+MAIL_MEC = DEFI_GROUP(reuse = MAIL_MEC,
+                      CREA_GROUP_NO=(_F(CRIT_NOEUD='TOUS',
+                                       GROUP_MA=('A1'),
+                                       NOM=('A1')),
+                                     _F(CRIT_NOEUD='TOUS',
+                                       GROUP_MA=('A2'),
+                                       NOM=('A2')),
+                                     _F(CRIT_NOEUD='TOUS',
+                                       GROUP_MA=('A5'),
+                                       NOM=('A5')),
+                                     _F(CRIT_NOEUD='TOUS',
+                                       GROUP_MA=('C3'),
+                                       NOM=('C3')),
+                                    _F(CRIT_NOEUD='TOUS',
+                                       GROUP_MA=('C5'),
+                                       NOM=('C5')),),
+                      MAILLAGE=MAIL_MEC)
+A1A2 = DEFI_GROUP(reuse = A1A2,
+                  CREA_GROUP_NO=(_F(CRIT_NOEUD='TOUS',
+                                   GROUP_MA=('A1'),
+                                   NOM=('A1')),
+                                 _F(CRIT_NOEUD='TOUS',
+                                   GROUP_MA=('A2'),
+                                   NOM=('A2')),),
+                  MAILLAGE=A1A2)
+A1 = DEFI_GROUP(reuse = A1,
+                CREA_GROUP_NO=(_F(CRIT_NOEUD='TOUS',
+                                 GROUP_MA=('A1'),
+                                 NOM=('A1')),),
+                MAILLAGE=A1)
+A2 = DEFI_GROUP(reuse = A2,
+                CREA_GROUP_NO=(_F(CRIT_NOEUD='TOUS',
+                                 GROUP_MA=('A2'),
+                                 NOM=('A2')),),
+                MAILLAGE=A2)
+A5 = DEFI_GROUP(reuse = A5,
+                CREA_GROUP_NO=(_F(CRIT_NOEUD='TOUS',
+                                 GROUP_MA=('A5'),
+                                 NOM=('A5')),),
+                MAILLAGE=A5)
+
+# Mesh data EXTRACTION
+# #for the malliage All
+ALLdat = MAIL_PY() # Function to access mesh with python
+ALLdat.FromAster(MAIL_MEC)
+ALLnnod = ALLdat.dime_maillage[0] #number of nodes
+ALLnelem = ALLdat.dime_maillage[2] #number of elements
+NoGO = ALLdat.gno     ## list of GROUP_NO groups (see help(MAIL_PY) for object methods reference)
+ALLCrd = ALLdat.cn  ## xyz coordinates of nodes (nonu*3 matrix)
+connec = ALLdat.co #   Get element connection as class CONNEC a two  numpy arrays
+#       referring to an element of it as follow:
+#       Connex[k]  array (sequence) of the node of the k-th element
+#       Connex[k][j]  reference the j-th node of the k-th element connectivity
+
+# #for the malliage A1A2
+A1A2dat = MAIL_PY() # Function to access mesh with python
+A1A2dat.FromAster(A1A2)
+A1A2nnod = A1A2dat.dime_maillage[0] #number of nodes
+A1A2nelem1 = A1A2dat.dime_maillage[2] #number of elements
+A1A2NoGO = A1A2dat.gno     ## list of GROUP_NO groups (see help(MAIL_PY) for object methods reference)
+A1A2Crd1 = A1A2dat.cn  ## xyz coordinates of nodes (nonu*3 matrix)
+A1A2connec = A1A2dat.co #   Get element connection as class CONNEC a two  numpy arrays
+
+#for the malliage A1
+A1dat = MAIL_PY() # Function to access mesh with python
+A1dat.FromAster(A1)
+A1nnod = A1dat.dime_maillage[0] #number of nodes
+A1nelem = A1dat.dime_maillage[2] #number of elements
+NoA1 = list(A1dat.correspondance_noeuds)
+A1Crd = A1dat.cn  ## xyz coordinates of nodes (nonu*3 matrix)
+A1GO = A1dat.gno
+
+#for the malliage A2
+A2dat = MAIL_PY() # Function to access mesh with python
+A2dat.FromAster(A2)
+A2nnod = A2dat.dime_maillage[0] #number of nodes
+A2nelem = A2dat.dime_maillage[2] #number of elements
+NoA2 = list(A2dat.correspondance_noeuds)
+A2Crd = A2dat.cn  ## xyz coordinates of nodes (nonu*3 matrix)
+A2GO = A2dat.gno     ## list of GROUP_NO groups (see help(MAIL_PY) for object methods reference)
+
+#for the malliage A5
+A5dat = MAIL_PY() # Function to access mesh with python
+A5dat.FromAster(A5)
+A5nnod = A5dat.dime_maillage[0] #number of nodes
+A5nelem = A5dat.dime_maillage[2] #number of elements
+NoA5 = list(A5dat.correspondance_noeuds)
+A5Crd = A5dat.cn  ## xyz coordinates of nodes (nonu*3 matrix)
+A5GO = A5dat.gno     ## list of GROUP_NO groups (see help(MAIL_PY) for object methods reference)
+
+#########################################################################
+#                                                                       #
+#                   MECHANICAL MODEL DEFINITION                         #
+#                                                                       #
+#########################################################################
+
+# Mechanical model
+mecamod = AFFE_MODELE(AFFE=(_F(MODELISATION=('AXIS', ), 
+                               PHENOMENE='MECANIQUE',
+                               TOUT='OUI'),),
+                      MAILLAGE=MAIL_MEC)
+
+
+####################### MATERIAL ASSIGNATION #######################
+
+# Material assignation for the material model
+fieldma1 = AFFE_MATERIAU(AFFE=(_F(GROUP_MA=('A2', 'A1',),
+                                  MATER=(mat1)),
+                               _F(GROUP_MA=('A5', ),
+                                  MATER=(mat2))),
+                         MODELE=mecamod)
+
+####################### MECHANICAL STQ DEFINITION #######################
+
+# boundary conditios
+Bound = AFFE_CHAR_MECA(DDL_IMPO=(_F(GROUP_MA=('C4','C8'),
+                                    DX=0.0,),
+                                 _F(DY=0.0,
+                                    GROUP_MA=('C7')),
+                                    ),
+                       MODELE=mecamod)
+
+load0 = AFFE_CHAR_MECA(FORCE_CONTOUR=_F(FY=FF,
+                                       GROUP_MA=('C1', )),
+                       MODELE=mecamod)
+
+load = AFFE_CHAR_MECA(LIAISON_MAIL=(_F(GROUP_MA_ESCL=('C91', ),
+                                       GROUP_MA_MAIT=('A1', )),
+                                    _F(GROUP_MA_ESCL=('C92', ),
+                                       GROUP_MA_MAIT=('A2', ))),
+                      MODELE=mecamod)
+
+# launching to solver for static analysis
+resnonl = MECA_STATIQUE(CHAM_MATER=fieldma1,
+                        EXCIT=(_F(CHARGE=Bound),
+                               _F(CHARGE=load0),
+                               _F(CHARGE=load)),
+                        MODELE=mecamod)
+
+#################### STRESS CALCULATION FORMULAS ####################
+
+#Hydrostatic stress calculation
+Sh = '(SIXX+SIYY+SIZZ)/3' #(s1+s2+s3)/3
+#Octahedral shear stress
+So = '(sqrt((SIXX-SIYY)**2+(SIYY-SIZZ)**2+(SIZZ-SIXX)**2))/3' #second invariant of the deviqtoric stress tensor 3D & 2D
+#Introducing the formulas to code_aster 2D
+s_h = FORMULE(NOM_PARA=('SIXX','SIYY','SIZZ','SIXY'),
+              VALE=Sh)
+s_o = FORMULE(NOM_PARA=('SIXX','SIYY','SIZZ','SIXY'),
+              VALE=So)
+
+###################### MECHANICAL RESULT EXTRACTION ########################
+
+# results for the mechanical part
+resnonl = CALC_CHAMP(reuse=resnonl,
+                     CONTRAINTE=('SIGM_ELGA','SIGM_NOEU'),
+                     DEFORMATION=('EPSI_ELGA'),
+                     GROUP_MA=('A1', 'A2'),
+                     FORCE=('FORC_NODA', 'REAC_NODA'),
+                     CHAM_UTIL=(_F(NOM_CHAM='SIGM_ELGA',
+                                   FORMULE=(s_h,s_o),
+                                   NUME_CHAM_RESU=2,),
+                                _F(NOM_CHAM='SIGM_NOEU',
+                                   FORMULE=(s_h,s_o),
+                                   NUME_CHAM_RESU=2,)),
+                     RESULTAT=resnonl)
+
+# U+=1
+# DEFI_FICHIER(ACTION='ASSOCIER',
+#              FICHIER= path_mec_res+str(i)+'.rmed',
+#              UNITE=U)
+
+# IMPR_RESU(RESU=_F(RESULTAT=resnonl,
+#                   GROUP_MA=('A1','A2')),
+#                   FORMAT='MED',
+#                   UNITE=U)
+
+#########################################################################
+#                                                                       #
+#                POSTPROCESS FOR THE DYNA MODEL All                     #
+#                                                                       #
+######################################################################### # Aqui se pone bueno
+# Extracting contact values from mechanical results
+Disp = {}
+CPress = {}
+ShnodALL = {}
+SonodALL = {}
+CPtot = {}
+sighp=[0]*ALLnnod
+sigop=[0]*ALLnnod
+FnodX = {}
+FnY = {}
+OI = []
+# List of the stresses
+champ = CREA_CHAMP (TYPE_CHAM = 'NOEU_NEUT_R', 
+                      OPERATION='EXTR',
+                      RESULTAT=resnonl,
+                      NOM_CHAM='UT02_NOEU',)
+shh = champ.EXTR_COMP('X1',['A1','A2']).valeurs.tolist()
+soo = champ.EXTR_COMP('X2',['A1','A2']).valeurs.tolist()
+ShnodALL['Sh'] = shh
+SonodALL['So'] = soo
+DETRUIRE(CONCEPT=_F(NOM=champ))
+
+# List of displacements
+chCP = CREA_CHAMP (TYPE_CHAM = 'NOEU_DEPL_R', 
+                   OPERATION='EXTR',
+                   RESULTAT=resnonl,
+                   NOM_CHAM='DEPL',)
+dx = chCP.EXTR_COMP('DX',['A1','A2']).valeurs.tolist()
+dy = chCP.EXTR_COMP('DY',['A1','A2']).valeurs.tolist()
+Disp['DX'] = dx
+Disp['DY'] = dy
+DETRUIRE(CONCEPT=_F(NOM=chCP))
+
+# List of the forces
+chFnod = CREA_CHAMP (TYPE_CHAM = 'NOEU_DEPL_R', 
+                   OPERATION='EXTR',
+                   RESULTAT=resnonl,
+                   NOM_CHAM='REAC_NODA',)
+fxx = chFnod.EXTR_COMP('DX',['A1','A2']).valeurs.tolist()
+fyy = chFnod.EXTR_COMP('DY',['A1','A2']).valeurs.tolist()
+FnodX['FX'] = fxx
+FnY['FY'] = fyy
+DETRUIRE(CONCEPT=_F(NOM=chFnod))
+
+# Values
+OctT = SonodALL['So']
+HydT = ShnodALL['Sh']
+
+#########################################################################
+#                                                                       #
+#                            THERMAL MODEL                              #
+#                                                                       #
+#########################################################################
+# Thermal mesh
+U+=1
+DEFI_FICHIER(ACTION='ASSOCIER',
+             FICHIER=path_def_mesh+'/A1G'+str(i)+'.unv',
+             UNITE=U)
+
+A1T = LIRE_MAILLAGE(FORMAT='IDEAS',
+                   UNITE=U)
+DEFI_FICHIER(ACTION='LIBERER',
+             UNITE=U)
+
+U+=1
+DEFI_FICHIER(ACTION='ASSOCIER',
+             FICHIER=path_def_mesh+'/A2G'+str(i)+'.unv',
+             UNITE=U)
+
+A2T = LIRE_MAILLAGE(FORMAT='IDEAS',
+                   UNITE=U)
+DEFI_FICHIER(ACTION='LIBERER',
+             UNITE=U)
+
+# Mesh merging
+MAIL_TH = ASSE_MAILLAGE(MAILLAGE_1=A1T,
+                        MAILLAGE_2=A2T,
+                        OPERATION='SUPERPOSE')
+
+# Mesh info
+A1A2datT = MAIL_PY() # Function to access mesh with python
+A1A2datT.FromAster(MAIL_TH)
+A1A2nnodT = A1A2datT.dime_maillage[0] #number of nodes
+A1A2Crd = A1A2datT.cn  ## xyz coordinates of nodes (nonu*3 matrix)
+A1A2nelem = A1A2datT.dime_maillage[2] #number of elements
+connecT = A1A2datT.co
+
+####### --- MAXIMUM VM STRESS 1 HYD STRESS --- #######
+# search for the limits of the geometry
+# for A1
+YminA1 = min(A1Crd[:,1])
+YmaxA1 = max(A1Crd[:,1])
+# for A2
+YminA2 = min(A2Crd[:,1])
+YmaxA2 = max(A2Crd[:,1])
+
+# search the maximum stresses
+STRStmp = {'hyd':[],'oct':[]}
+n=0
+for it in range(A1A2nnodT):
+    yc = ALLCrd[n,1]
+    if (n in NoGO['A1']):
+        BS = BScal(d1=mallzoneA1,d2=mallzoneA1*grplte,Y=(yc-YminA1))
+        bs = int(BS)
+        STRStmp['hyd'].append(abs(HydT[n]*bs))
+        STRStmp['oct'].append(OctT[n]*bs)
+    if (n in NoGO['A2']):
+        BS = BScal(d1=mallzoneA2,d2=mallzoneA2*grplte,Y=(yc-YmaxA2))
+        bs = int(BS)
+        STRStmp['hyd'].append(abs(HydT[n]*bs))
+        STRStmp['oct'].append(OctT[n]*bs)
+    n+=1
+Octmax = max(STRStmp['oct'])
+Hydmax = max(STRStmp['hyd'])
+
+# NORMALIZED STRESSES
+NormO = [k/Octmax for k in OctT]
+NormH = [k/Hydmax for k in HydT]
+
+# List oFOR THE Osteogenix Index
+koi = 0.0
+for oi in range(len(NormH)):
+    OI.append(NormO[oi]+koi*NormH[oi])
+
+#Thermal material
+thermat=DEFI_MATERIAU(THER=_F(LAMBDA=lamb)) #Thermal material for thermal mecamod
+
+# modelisation
+thermod = AFFE_MODELE(AFFE=(_F(MODELISATION=('AXIS', ), 
+                               PHENOMENE='THERMIQUE',
+                               GROUP_MA=('A1', 'A2',)),),
+                      MAILLAGE= MAIL_TH)
+
+## Assign thermal material to thermal model
+fieldma2 = AFFE_MATERIAU(AFFE=(_F(GROUP_MA=('A2', 'A1',),
+                                  MATER=(thermat))),
+                         MODELE=thermod)
+#TEST
+# Notmp = []
+# for it in NoGO['C3']:
+#     Notmp.append(NormO[it])
+# NOCTlim = max(Notmp)#*(1+0.25)
+############# PERCENTAGE approach
+# Temperature assignation
+TempALL = []
+n=0
+for it in range(A1A2nnodT):
+    yc = ALLCrd[n,1]
+    if (n in NoGO['A1']):
+        BS = BScal(d1=mallzoneA1,d2=mallzoneA1*grplte,Y=(yc-YminA1))
+    if (n in NoGO['A2']):
+        BS = BScal(d1=mallzoneA2,d2=mallzoneA2*grplte,Y=(yc-YmaxA2))
+    # if NormO[n] < NOCTlim:
+    #     tempCalcule = NormH[n]*BS
+    # else:
+    #     tempCalcule = 0
+    tempCalcule = expfunc(NOCTlim,NormO[n],aexpfunc)*NormH[n]*BS
+    TempALL.append(tempCalcule)
+    n+=1
+    
+# Stress as Temperature all positive
+TempALLe = [0 if k > HYDTlim else abs(HYDTlim-k) for k in TempALL]
+
+# list definition for the temperature at each node for ALL
+ATALL = [] #list for aster
+n=0
+for k in range(A1A2nnodT): #loop trough all nodes in the group
+        ATALL.append(_F(NOEUD = 'N%d' %(k+1),TEMP=TempALLe[n],),) #add to the list the code aster macros for temperatures
+        n+=1
+
+#Imposition of the temperatures
+tlis=AFFE_CHAR_THER(MODELE=thermod,
+                    TEMP_IMPO=(ATALL))
+#
+# launching to solver for thermal analysis
+resther = THER_LINEAIRE(CHAM_MATER=fieldma2,
+                        EXCIT=(_F(CHARGE=tlis),),
+                        MODELE=thermod)
+    
+#THERMAL RESULT EXTRACTION 
+# results for the thermal part
+resther = CALC_CHAMP(reuse=resther,
+                     RESULTAT=resther,
+                     THERMIQUE=('FLUX_ELNO','FLUX_NOEU' ))
+    
+# U+=1
+# DEFI_FICHIER(ACTION='ASSOCIER',
+#              FICHIER=path_tmp_res+'temp'+str(i)+'.rmed',
+#              UNITE=U)
+
+# IMPR_RESU(RESU=_F(RESULTAT=resther,),
+#           FORMAT='MED',
+#           UNITE=U)
+    
+#########################################################################
+#                                                                       #
+#                   PROJECTION THERMAL/MECHANICAL                       #
+#                                                                       #
+#########################################################################
+    
+#Here we calculate the deformation
+#Projection of the thermal model on the mechanical model for thermal expansion
+U+=1
+DEFI_FICHIER(ACTION='ASSOCIER',
+             FICHIER=path_def_mesh+'/A1G'+str(i)+'.unv',
+             UNITE=U)
+
+A1M = LIRE_MAILLAGE(FORMAT='IDEAS',
+                   UNITE=U)
+DEFI_FICHIER(ACTION='LIBERER',
+             UNITE=U)
+
+U+=1
+DEFI_FICHIER(ACTION='ASSOCIER',
+             FICHIER=path_def_mesh+'/A2G'+str(i)+'.unv',
+             UNITE=U)
+
+A2M = LIRE_MAILLAGE(FORMAT='IDEAS',
+                   UNITE=U)
+DEFI_FICHIER(ACTION='LIBERER',
+             UNITE=U)
+
+# Mesh merging
+MAIL_M2 = ASSE_MAILLAGE(MAILLAGE_1=A1M,
+                        MAILLAGE_2=A2M,
+                        OPERATION='SUPERPOSE')
+
+#modelo
+mecamod2 = AFFE_MODELE(AFFE=(_F(MODELISATION=('AXIS'), 
+                           PHENOMENE='MECANIQUE',
+                           GROUP_MA=('A1', 'A2')),),
+                       MAILLAGE=MAIL_M2)
+
+resproj = PROJ_CHAMP(MODELE_1=thermod,
+                     MODELE_2=mecamod2,
+                     PROJECTION='OUI',
+                     RESULTAT=resther,
+                     VIS_A_VIS=(_F(GROUP_MA_1='A1', GROUP_MA_2='A1'),
+                                _F(GROUP_MA_1='A2', GROUP_MA_2='A2'),))
+
+mat3 = DEFI_MATERIAU(ELAS=_F(E=Em, #steel for the rocker arm and the valve
+                             NU=Vmat,
+                             ALPHA=alpha),
+                     THER=_F(LAMBDA=lamb))
+
+fieldma3 = AFFE_MATERIAU(AFFE=(_F(GROUP_MA=('A1'),
+                                  MATER=(mat3)),
+                               _F(GROUP_MA=('A2'),
+                                  MATER=(mat3)),),
+                         AFFE_VARC=_F(EVOL=resproj,
+                                      NOM_VARC='TEMP',
+                                      TOUT='OUI',
+                                      VALE_REF=temp_ref),
+                         MODELE = mecamod2)
+
+# boundary conditions for expansion
+Bound2 = AFFE_CHAR_MECA(DDL_IMPO=(_F(GROUP_MA = ('C4','C8'),
+                                     DX=0.0, 
+                                     ),
+                                   _F(GROUP_MA = ('C1','C7'),
+                                      DY=0.0,),
+                                     ),
+                        MODELE=mecamod2)
+
+# launching to solve for static analysis
+res = MECA_STATIQUE(CHAM_MATER=fieldma3,
+                    EXCIT=(_F(CHARGE=Bound2),),
+                    MODELE=mecamod2)
+
+res = CALC_CHAMP(reuse=res,
+                 CONTRAINTE=('SIGM_ELGA','SIGM_ELNO'),
+                #  DEFORMATION=('EPSI_ELGA'),
+                 RESULTAT=res)
+
+# # Printing of the mechanical results in a MED file
+# U+=1
+# DEFI_FICHIER(ACTION='ASSOCIER',
+#              FICHIER=path_tmp_res+'temp'+str(i)+'.rmed',
+#              UNITE=U)
+
+# IMPR_RESU(RESU=_F(RESULTAT=res,),
+#           FORMAT='MED',
+#           UNITE=U)
+
+#########################################################################
+#                                                                       #
+#                     DEFORMED MESH EXTRACTION                          #
+#                                                                       #
+#########################################################################
+
+# Extraction for next iteration (used as the initial mesh)
+DISPL=CREA_CHAMP(TYPE_CHAM='NOEU_DEPL_R',
+                 OPERATION='EXTR',
+                 RESULTAT=res,
+                 NOM_CHAM='DEPL',)
+
+MAIL_M2=MODI_MAILLAGE(reuse =MAIL_M2,
+                       MAILLAGE=MAIL_M2,
+                       DEFORME=_F(OPTION='TRAN',
+                                  DEPL=DISPL,))
+
+mecaA1 = AFFE_MODELE(AFFE=_F(MODELISATION=('AXIS', ), # mechanical MODEL
+                             PHENOMENE='MECANIQUE',
+                             TOUT='OUI'),
+                     MAILLAGE=A1M)
+
+projA1 = PROJ_CHAMP(MODELE_1=mecamod2,
+                    MODELE_2=mecaA1,
+                    PROJECTION='OUI',
+                    CHAM_GD=DISPL,
+                    VIS_A_VIS=(_F(GROUP_MA_1='A1', GROUP_MA_2='A1'),))
+            
+A1M=MODI_MAILLAGE(reuse =A1M,
+                  MAILLAGE=A1M,
+                  DEFORME=_F(OPTION='TRAN',
+                             DEPL=projA1,))
+
+U+=1
+DEFI_FICHIER(ACTION='ASSOCIER',
+             FICHIER= path_def_mesh+'/A1D'+str(i)+'.unv',
+             UNITE=U)
+
+IMPR_RESU(RESU=(_F(MAILLAGE=A1M)),
+          FORMAT='IDEAS',
+          UNITE=U)
+
+mecaA2 = AFFE_MODELE(AFFE=_F(MODELISATION=('AXIS', ), # mechanical MODEL
+                             PHENOMENE='MECANIQUE',
+                             TOUT='OUI'),
+                     MAILLAGE=A2M)
+
+projA2 = PROJ_CHAMP(MODELE_1=mecamod2,
+                    MODELE_2=mecaA2,
+                    PROJECTION='OUI',
+                    CHAM_GD=DISPL,
+                    VIS_A_VIS=(_F(GROUP_MA_1='A2', GROUP_MA_2='A2'),))
+            
+A2M=MODI_MAILLAGE(reuse =A2M,
+                  MAILLAGE=A2M,
+                  DEFORME=_F(OPTION='TRAN',
+                             DEPL=projA2,))
+
+U+=1
+DEFI_FICHIER(ACTION='ASSOCIER',
+             FICHIER= path_def_mesh+'/A2D'+str(i)+'.unv',
+             UNITE=U)
+
+IMPR_RESU(RESU=(_F(MAILLAGE=A2M)),
+          FORMAT='IDEAS',
+          UNITE=U)
+        
+# AREA
+_, _, _, AreaA1 = Runv.RUNVfile(path_def_mesh+'/A1G'+str(i)+'.unv')
+_, _, _, AreaA2 = Runv.RUNVfile(path_def_mesh+'/A2G'+str(i)+'.unv')
+AreaTot = AreaA1 + AreaA2
+
+maxCP = {}
+if os.path.exists(Workdir+'/MSHDAT/CPDatH.json'): # file for info
+    with open(Workdir+'/MSHDAT/CPDatH.json') as fCPDAT:
+        maxCP = json.load(fCPDAT)
+
+if i!=0:
+    maxCP.update({'dAA1%d'%i: (AreaA1 - maxCP['AA1%d'%(i-1)])})
+    maxCP.update({'dAA2%d'%i: (AreaA2 - maxCP['AA2%d'%(i-1)])})
+    maxCP.update({'dAAT%d'%i: (AreaTot - maxCP['AAT%d'%(i-1)])})
+    maxCP.update({'AA1%d'%i: AreaA1})
+    maxCP.update({'AA2%d'%i: AreaA2})
+    maxCP.update({'AAT%d'%i: AreaTot})
+    maxCP.update({'NOlim%d'%i: NOCTlim})
+else:
+    maxCP.update({'dAA1%d'%i: 0})
+    maxCP.update({'dAA2%d'%i: 0})
+    maxCP.update({'dAAT%d'%i: 0})
+    maxCP.update({'AA1%d'%i: AreaA1})
+    maxCP.update({'AA2%d'%i: AreaA2})
+    maxCP.update({'AAT%d'%i: AreaTot})
+    maxCP.update({'NOlim%d'%i: NOCTlim})
+with open(Workdir+'/MSHDAT/CPDatH.json','w') as outfile:
+    json.dump(maxCP, outfile)
+
+labellist =  [['dAA1', 'area1'], ['dAA2', 'area2'], ['dAAT', 'areaT'], ['NOlim', 'Noctlim']]
+#Plot the advancement
+Grph.plotter(jsonfile=Workdir+jsonfile,Workdir=Workdir, i=i,  jsonfileinf=Workdir+'/MSHDAT/CPDatH.json', labellist=labellist)
+#########################################################################
+#                                                                       #
+#                               Paraview                                #
+#                                                                       #
+#########################################################################
+
+res = {}
+ALLCrd22 = np.zeros((len(A1A2Crd1),2))
+res.update({'Sh':ShnodALL['Sh']})
+res.update({'So':SonodALL['So']})
+res.update({'FX':FnodX['FX']})
+res.update({'FY':FnY['FY']})
+res.update({'DX':Disp['DX']})
+res.update({'DY':Disp['DY']})
+res.update({'TEMP':TempALLe})
+res.update({'OI':OI})
+res.update({'NO': NormO})
+res.update({'NH': NormH})
+for h in range(len(A1A2Crd)):
+    ALLCrd22[h,0] = A1A2Crd1[h,0] #+ Disp['DX'][h]
+    ALLCrd22[h,1] = A1A2Crd1[h,1] #+ Disp['DY'][h]
+namefile = ProblemData['paraview']['growname']+str(i)+'-0'
+vtkk.writeVTK(Workdir=Workdir,
+              namefile=namefile,
+              NNODES=A1A2nnod,
+              NELEMS=A1A2nelem1,
+              coord=ALLCrd22,
+              connec=A1A2connec,
+              result=res)
+
+vtkk.writeVTKSeries(Workdir = Workdir,
+                    namefile= ProblemData['paraview']['growname'],
+                    fps= ProblemData['paraview']['fpsGrow'],
+                    loop=False,
+                    tstp= 0,
+                    i=i)
+
+FIN()

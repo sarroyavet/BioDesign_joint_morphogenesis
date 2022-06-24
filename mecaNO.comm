@@ -1,0 +1,488 @@
+# CONTACT PART
+# importing all the libraries necesary for the code
+
+import sys
+sys.path.append( '/home/salome_meca/V2019.0.3_universal/tools/Code_aster_stable-v144_smeca/lib/aster/Utilitai/' )
+from Utilitai.partition import *
+import numpy as np
+import pprint
+import json
+
+#----------------------------------------------------------------------------------------------------------------------
+#    It is necessary to select "command by command" execution
+#    deactivating PAR_LOT option
+#    Document u1.03.02
+DEBUT(LANG='EN',
+      PAR_LOT='NON')
+
+#########################################################################
+#                        VARIABLES DEFINITION                           #
+#########################################################################
+#
+# WORK DIRECTORY
+Workdir = '#WORKDIR/'
+Workdirgen = '#GENWORKDIR/'
+jsonfile = '#jasonfile'
+sys.path.append(Workdirgen)
+import Pyfile.resVTK as vtkk
+import Pyfile.graphicconv as Grph
+# 
+# IMPORT PARAMETERS 
+# from gen
+with open(Workdir+'/param.json') as Fpara:
+    parameters = json.load(Fpara)
+# Growth step
+i = parameters['Gstp'] # growth step
+
+# from the problem definition
+# Opening JSON file of parameters
+with open(Workdir+jsonfile) as f:
+    # returns JSON object as a dictionary
+    ProblemData = json.load(f)
+
+# PROBLEM PARAMETERS
+# Load
+FF = ProblemData['Load_param']['Applied_force'] # Applied Force
+# Material
+Vmat = ProblemData['Mat_param']['poisson_material'] # Poisson of the material
+Em = ProblemData['Mat_param']['Young_material'] # Young of the material
+#time steps
+fini = ProblemData['Contact_param']['final_step'] # Final timestep
+tstp = ProblemData['Contact_param']['total_num_steps'] # Total number of timesteps
+pas = fini/tstp # the length of each time step
+#Contact
+Coul = ProblemData['Contact_param']['Friction'] # friction coefficient
+# Unit for the files
+U = 10 # Para configurar los ficheros
+#
+# FILE PATHS DEFINITION
+path_def_mesh = Workdir+'MED_FILES/DEF'
+path_tmp_res = Workdir+'MED_FILES/RESU_MEC/'
+path_mec_res = Workdir+'MED_FILES/RESU_MEC/res_mecH'
+
+#########################################################################
+#                                                                       #
+#                                   MAIN                                #
+#                                                                       #
+#########################################################################
+#
+#MATERIAL DEFINITION
+# Material with Thermal Expansion
+mat1 = DEFI_MATERIAU(ELAS=_F(E=Em,
+                             NU=Vmat,),)
+
+####################### MESH READING #######################
+# A1
+DEFI_FICHIER(ACTION='ASSOCIER',
+             FICHIER=path_def_mesh+'/A1C'+str(i)+'.unv',
+             UNITE=U)
+
+A1 = LIRE_MAILLAGE(FORMAT='IDEAS',
+                   UNITE=U)
+
+# A1
+U+=1
+DEFI_FICHIER(ACTION='ASSOCIER',
+             FICHIER=path_def_mesh+'/A2C'+str(i)+'.unv',
+             UNITE=U)
+
+A2 = LIRE_MAILLAGE(FORMAT='IDEAS',
+                   UNITE=U)
+
+# Superposition of both meshes
+MAIL_ME = ASSE_MAILLAGE(MAILLAGE_1=A1,
+                         MAILLAGE_2=A2,
+                         OPERATION='SUPERPOSE')
+
+#Create group of nodes
+MAIL_ME = DEFI_GROUP(reuse = MAIL_ME,
+                      CREA_GROUP_NO=(_F(CRIT_NOEUD='TOUS',
+                                       GROUP_MA=('A1'),
+                                       NOM=('A1')),
+                                     _F(CRIT_NOEUD='TOUS',
+                                       GROUP_MA=('A2'),
+                                       NOM=('A2')),
+                                     _F(CRIT_NOEUD='TOUS',
+                                       GROUP_MA=('C3'),
+                                       NOM=('C3')),
+                                     _F(CRIT_NOEUD='TOUS',
+                                       GROUP_MA=('C5'),
+                                       NOM=('C5'))),
+                      MAILLAGE=MAIL_ME)
+
+# #########################################################################
+# #                                                                       #
+# #                          MODEL DEFINITION                             # 
+# #                                                                       #
+# #########################################################################
+
+MAIL_ME = MODI_MAILLAGE(reuse=MAIL_ME,
+                         MAILLAGE=MAIL_ME,
+                         ORIE_PEAU_2D=(_F(GROUP_MA=('C1','C2','C3','C4','C5','C6','C7','C8')),
+                         ))
+
+MAIL_MEC = CREA_MAILLAGE(MAILLAGE=MAIL_ME,
+                         DECOUPE_LAC=(_F(GROUP_MA_ESCL=('C3')),
+                         ))
+
+# Mesh data EXTRACTION
+# #for the malliage All
+ALLdat = MAIL_PY() # Function to access mesh with python
+ALLdat.FromAster(MAIL_MEC)
+ALLnnod = ALLdat.dime_maillage[0] #number of nodes
+ALLnelem = ALLdat.dime_maillage[2] #number of elements
+NoGO = ALLdat.gno     ## list of GROUP_NO groups (see help(MAIL_PY) for object methods reference)
+ALLCrd = ALLdat.cn  ## xyz coordinates of nodes (nonu*3 matrix)
+connec = ALLdat.co #   Get element connection as class CONNEC a two  numpy arrays
+#       referring to an element of it as follow:
+#       Connex[k]  array (sequence) of the node of the k-th element
+#       Connex[k][j]  reference the j-th node of the k-th element connectivity
+
+# Mechanical model
+mecamod = AFFE_MODELE(AFFE=(_F(MODELISATION=('AXIS', ), 
+                               PHENOMENE='MECANIQUE',
+                               GROUP_MA=('A1', 'A2','C1','C2','C3','C4','C5','C6','C7','C8')),),
+                      MAILLAGE=MAIL_MEC)
+
+# ####################### MATERIAL ASSIGNATION #######################
+
+# Material assignation for the material model
+fieldma1 = AFFE_MATERIAU(AFFE=(_F(GROUP_MA=('A2', 'A1',),
+                                  MATER=(mat1)),),
+                         MODELE=mecamod)
+
+# ################# MECHANICAL STA-NON-LIN DEFINITION ##################
+
+# timestep list
+listr = DEFI_LIST_REEL(DEBUT=0.0,
+                       INTERVALLE=_F(JUSQU_A=fini,
+                                     PAS=pas))
+
+times = DEFI_LIST_INST(DEFI_LIST=_F(LIST_INST=listr,
+                                    PAS_MINI=1e-12),
+                       METHODE='AUTO')
+
+func0 = DEFI_FONCTION(NOM_PARA='INST',
+                      VALE=(0.0, 0.0, 1.0, 1.0))
+
+# boundary conditios
+Bound = AFFE_CHAR_MECA(DDL_IMPO=(_F(GROUP_MA=('C4','C8'),
+                                    DX=0.0,),
+                                 _F(DY=0.0,
+                                    GROUP_MA=('C7')),),
+                       MODELE=mecamod)
+
+load0 = AFFE_CHAR_MECA(FORCE_CONTOUR=_F(FY=FF,
+                                       GROUP_MA=('C1', )),
+                       MODELE=mecamod)
+
+contact = DEFI_CONTACT(FORMULATION='CONTINUE',
+                    #    FROTTEMENT='COULOMB',
+                       MODELE=mecamod,
+                       LISSAGE='OUI',
+                       ALGO_RESO_GEOM='NEWTON', #POINT_FIXE NEWTON
+                       ALGO_RESO_CONT='NEWTON', #NEW
+                       #ITER_GEOM_MAXI= 30,
+                       ZONE=_F(ALGO_CONT='LAC',
+                            #    ALGO_FROT='PENALISATION',
+                            #    COEF_PENA_FROT=0.1,
+                            #    INTEGRATION='AUTO',
+                               CONTACT_INIT='INTERPENETRE', 
+                            #    COULOMB=Coul,
+                               GROUP_MA_ESCL=('C3', ),
+                               GROUP_MA_MAIT=('C5', ),
+                            #    INTEGRATION='GAUSS',
+                               ))
+
+# launching solver for static analysis
+resnonl = STAT_NON_LINE(CHAM_MATER=fieldma1,
+                        COMPORTEMENT=_F(DEFORMATION='PETIT',
+                                        RELATION='ELAS'),
+                        CONTACT=contact,
+                        CONVERGENCE=_F(ITER_GLOB_ELAS=200,
+                                       ITER_GLOB_MAXI=200,),
+                        EXCIT=(_F(CHARGE=Bound),
+                               _F(CHARGE=load0,
+                                  FONC_MULT=func0)),
+                        INCREMENT=_F(LIST_INST=listr,
+                                     PRECISION=1E-8),
+                        MODELE=mecamod,
+                        NEWTON=_F(REAC_INCR=1))
+
+# result for the contact pressure (on have to calculate SIEF_NOEU so that calc_press works)
+resnonl = CALC_CHAMP(reuse=resnonl,
+                     CONTRAINTE=('SIEF_NOEU', ),
+                     RESULTAT=resnonl)
+
+field0 = CALC_PRESSION(GEOMETRIE='INITIALE', #pressure on C5
+                       GROUP_MA=('C5',),
+                       INST=(fini, ),
+                       MAILLAGE=MAIL_MEC,
+                       RESULTAT=resnonl)
+
+field1 = CALC_PRESSION(GEOMETRIE='INITIALE', #pressure on C3
+                       GROUP_MA=('C3'),
+                       INST=(fini, ),
+                       MAILLAGE=MAIL_MEC,
+                       RESULTAT=resnonl)
+
+#################### STRESS CALCULATION FORMULAS ####################
+
+#Hydrostatic stress calculation
+Sh = '(SIXX+SIYY+SIZZ)/3' #(s1+s2+s3)/3
+#Octahedral shear stress
+So = '(sqrt((SIXX-SIYY)**2+(SIYY-SIZZ)**2+(SIZZ-SIXX)**2))/3' #second invariant of the deviqtoric stress tensor 3D & 2D
+#Introducing the formulas to code_aster 2D
+s_h = FORMULE(NOM_PARA=('SIXX','SIYY','SIZZ','SIXY'),
+              VALE=Sh)
+s_o = FORMULE(NOM_PARA=('SIXX','SIYY','SIZZ','SIXY'),
+              VALE=So)
+
+###################### MECHANICAL RESULT EXTRACTION ########################
+
+# results for the mechanical part
+resnonl = CALC_CHAMP(reuse=resnonl,
+                     CONTRAINTE=('SIGM_ELGA','SIGM_NOEU'),
+                     DEFORMATION=('EPSI_ELGA'),
+                     CHAM_UTIL=(_F(NOM_CHAM='SIGM_ELGA',
+                                   FORMULE=(s_h,s_o),
+                                   NUME_CHAM_RESU=2,),
+                                _F(NOM_CHAM='SIGM_NOEU',
+                                   FORMULE=(s_h,s_o),
+                                   NUME_CHAM_RESU=2,)),
+                     LIST_INST=listr,
+                     RESULTAT=resnonl)
+
+resnonl = CALC_CHAMP(reuse=resnonl,
+                     FORCE=('FORC_NODA', 'REAC_NODA'),
+                     LIST_INST=listr,
+                     RESULTAT=resnonl)
+
+# U+=1
+# DEFI_FICHIER(ACTION='ASSOCIER',
+#              FICHIER= path_mec_res+str(i)+'.rmed',
+#              UNITE=U)
+
+# IMPR_RESU(RESU=(_F(RESULTAT=resnonl,),
+#                 _F(CHAM_GD=field0)),
+#           UNITE=U)
+   
+#########################################################################
+#                                                                       #
+#                POSTPROCESS FOR THE DYNA MODEL All                     #
+#                                                                       #
+######################################################################### # Aqui se pone bueno
+# Extracting contact values from mechanical results
+Disp = {}
+CPress = {}
+ShnodALL = {}
+SonodALL = {}
+CPtot = {}
+sighp=[0]*ALLnnod
+sigop=[0]*ALLnnod
+FnodX = {}
+FnY = {}
+OI = []
+for k in range (0,int(tstp)+1):
+    ins = k*pas
+    # List of the stresses
+    champ = CREA_CHAMP (TYPE_CHAM = 'NOEU_NEUT_R', 
+                          OPERATION='EXTR',
+                          RESULTAT=resnonl,
+                          NOM_CHAM='UT02_NOEU',
+                          INTERPOL='LIN',
+                          INST=ins)
+    shh = champ.EXTR_COMP('X1',[]).valeurs.tolist()
+    soo = champ.EXTR_COMP('X2',[]).valeurs.tolist()
+    ShnodALL['Sh%d'%k] = shh
+    SonodALL['So%d'%k] = soo
+    sighp = [sum(j) for j in zip(sighp,shh)]
+    sigop = [sum(j) for j in zip(sigop,soo)]
+    DETRUIRE(CONCEPT=_F(NOM=champ))
+    
+    # List of displacements
+    chCP = CREA_CHAMP (TYPE_CHAM = 'NOEU_DEPL_R', 
+                       OPERATION='EXTR',
+                       RESULTAT=resnonl,
+                       NOM_CHAM='DEPL',
+                       INTERPOL='LIN',
+                       INST=ins)
+    dx = chCP.EXTR_COMP('DX',[]).valeurs.tolist()
+    dy = chCP.EXTR_COMP('DY',[]).valeurs.tolist()
+    Disp['DX%d'%k] = dx
+    Disp['DY%d'%k] = dy
+    DETRUIRE(CONCEPT=_F(NOM=chCP))
+    
+    # List of the forces
+    chFnod = CREA_CHAMP (TYPE_CHAM = 'NOEU_DEPL_R', 
+                       OPERATION='EXTR',
+                       RESULTAT=resnonl,
+                       NOM_CHAM='REAC_NODA',
+                       INTERPOL='LIN',
+                       INST=ins)
+    fxx = chFnod.EXTR_COMP('DX',[]).valeurs.tolist()
+    fyy = chFnod.EXTR_COMP('DY',[]).valeurs.tolist()
+    FnodX['FX%d'%k] = fxx
+    FnY['FY%d'%k] = fyy
+    DETRUIRE(CONCEPT=_F(NOM=chFnod))
+
+# average stresses
+sighp = [h/tstp for h in sighp]
+sigop = [h/tstp for h in sigop]
+ShnodALL.update({'Sprom': sighp})
+SonodALL.update({'Sprom': sigop})
+
+
+# Max stresses
+MaxSH = max([abs(rr) for rr in ShnodALL['Sh%d'%int(tstp)]])
+MaxSO = max([abs(rr) for rr in SonodALL['So%d'%int(tstp)]])
+# print(MaxSH,MaxSO,'kakaka')
+
+# Normalized stresses
+NH = [uu/MaxSH for uu in ShnodALL['Sh%d'%int(tstp)]]
+NO = [uu/MaxSO for uu in SonodALL['So%d'%int(tstp)]]
+
+# This is ourselves under pressure, under pressure
+listecp = [0]*ALLnnod
+# Per contour in contact C5
+calpre0 = []
+calpre0 = field0.EXTR_COMP('LAGS_C',[]).valeurs.tolist()
+for h in range(len(NoGO['C5'])): #C5
+    listecp[NoGO['C5'][h]] = calpre0[h]  #C5
+# Per contour in contact C3
+calpre1 = []
+calpre1 = field1.EXTR_COMP('LAGS_C',[]).valeurs.tolist()
+for h in range(len(NoGO['C3'])): #C3
+    listecp[NoGO['C3'][h]] = calpre1[h]  #C3
+# Getting the maximum pressure
+Press = [abs(h) for h in listecp]
+MaxCP = max(Press)
+
+##########################################################################################
+##########################################################################################
+# Saving the contact pressure data for postprocess afterwards (FOR THE CP EVOLUTION GRAPHIC)
+maxCP = {}
+if os.path.exists(Workdir+'/MSHDAT/CPDatH.json'): # file for info
+    with open(Workdir+'/MSHDAT/CPDatH.json') as fCPDAT:
+        maxCP = json.load(fCPDAT)
+
+xx = []
+CPC5 =[]
+for h in range(len(NoGO['C5'])):
+  CPC5.append(calpre0[h])
+  xx.append(ALLCrd[NoGO['C5'][h],0])
+
+maxCP.update({'XX%d'%i:xx})
+maxCP.update({'CPC5%d'%i:CPC5})
+
+maxCP.update({'CP%d'%i: MaxCP})
+maxCP.update({'CSH%d'%i: MaxSH})
+maxCP.update({'CVM%d'%i: MaxSO})
+maxCP.update({'CPN%d'%i: MaxCP/maxCP['CP0']})
+maxCP.update({'CSHN%d'%i: MaxSH/maxCP['CSH0']})
+maxCP.update({'CVMN%d'%i: MaxSO/maxCP['CVM0']})
+
+with open(Workdir+'/MSHDAT/CPDatH.json','w') as outfile:
+    json.dump(maxCP, outfile)
+# print('CPDatopus',maxCP)
+
+labellist = [['CP', 'contact'],['CSH', 'hydros'],['CVM', 'vm'], ['CPN', 'Normcontact'],['CSHN', 'Normhydros'],['CVMN', 'Normvm']] 
+
+#Plot the advancement
+Grph.plotter(jsonfile=Workdir+jsonfile,Workdir=Workdir, i=i,  jsonfileinf=Workdir+'/MSHDAT/CPDatH.json', labellist=labellist)
+
+# #Determining the first node at A1 and A2   
+# s = 0
+# while s==0:
+#     for l in range(int(tstp)):
+#         Nfydo = []
+#         Fi = []
+#         h = 0
+#         for k in range(len(NoGO['C5'])):
+#             if abs(FnY['FY%d'%l][NoGO['C5'][k]]) > 1e-5:
+#                 Nfydo.append(NoGO['C5'][k])
+#                 Fi.append(abs(FnY['FY%d'%l][NoGO['C5'][k]]))
+#                 h = 1
+#         if h == 1:
+#             nodoma = Nfydo[Fi.index(max(Fi))]
+#             cry = ALLCrd[nodoma][1]
+#             dplyA2 = 0.0-cry
+#             s = 1
+#             break
+# print(dplyA2, 'dplyA2')
+    
+# s = 0
+# while s==0:
+#     for l in range(int(tstp)):
+#         Nfydo = []
+#         Fi = []
+#         h = 0
+#         for k in range(len(NoGO['C3'])):
+#             if abs(FnY['FY%d'%l][NoGO['C3'][k]]) > 1e-5:
+#                 Nfydo.append(NoGO['C3'][k])
+#                 Fi.append(abs(FnY['FY%d'%l][NoGO['C3'][k]]))
+#                 h = 1
+#         if h ==1 :
+#             nodoma = Nfydo[Fi.index(max(Fi))]
+#             nodeA1y = ALLCrd[nodoma][1]
+#             dplyA1 = ProblemData['Geo_param']['capsule_thickness']-nodeA1y 
+#             s = 1
+#             break
+# print(dplyA1, 'dplyA1')
+# ddply = {'DplyA2': dplyA2, 'DplyA1': dplyA1,}
+# Ffca = Workdir+'/dply.json'
+# with open(Ffca, 'w') as out_file:
+#       json.dump(ddply, out_file)
+
+#########################################################################
+#                                                                       #
+#                               Paraview                                #
+#                                                                       #
+#########################################################################
+# for l in range(0,int(tstp)+1):
+
+l = tstp
+res = {}
+ALLCrd22 = np.zeros((len(ALLCrd),2))
+res.update({'Sh':ShnodALL['Sh%d'%l]})
+res.update({'So':SonodALL['So%d'%l]})
+res.update({'Shprom':ShnodALL['Sprom']})
+res.update({'Soprom':SonodALL['Sprom']})
+res.update({'Cpress':listecp})
+res.update({'FX':FnodX['FX%d'%l]})
+res.update({'FY':FnY['FY%d'%l]})
+res.update({'DX':Disp['DX%d'%l]})
+res.update({'DY':Disp['DY%d'%l]})
+res.update({'NH':NH})
+res.update({'NO':NO})
+for h in range(len(ALLCrd)):
+    ALLCrd22[h,0] = ALLCrd[h,0]+ Disp['DX%d'%l][h]
+    ALLCrd22[h,1] = ALLCrd[h,1]+ Disp['DY%d'%l][h]
+namefile = ProblemData['paraview']['realname']+str(i)+'-'+str(l)
+vtkk.writeVTK(Workdir=Workdir,
+              namefile=namefile,
+              NNODES=ALLnnod,
+              NELEMS=ALLnelem,
+              coord=ALLCrd22,
+              connec=connec,
+              result=res)
+
+vtkk.writeVTKSeries(Workdir = Workdir,
+                    namefile= ProblemData['paraview']['realname'],
+                    fps= ProblemData['paraview']['fpsReal'],
+                    loop=False, #True
+                    tstp= tstp,
+                    i=i)
+
+# U+=1
+# DEFI_FICHIER(ACTION='ASSOCIER',
+#              FICHIER= Workdir+'/MED_FILES/DEF/testA1.unv',
+#              UNITE=U)
+
+# IMPR_RESU(RESU=(_F(MAILLAGE=A1)),
+#           FORMAT='IDEAS',
+#           UNITE=U)
+
+# print('THIS IS CPMAX',MaxCP)
+
+FIN()
