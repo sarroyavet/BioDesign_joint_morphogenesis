@@ -5,7 +5,7 @@ import sys
 sys.path.append( '/home/salome_meca/V2019.0.3_universal/tools/Code_aster_stable-v144_smeca/lib/aster/Utilitai/' )
 from Utilitai.partition import *
 import numpy as np
-import pprint
+# import pprint
 import json
 
 #----------------------------------------------------------------------------------------------------------------------
