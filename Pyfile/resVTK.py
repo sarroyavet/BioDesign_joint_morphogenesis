@@ -16,7 +16,7 @@ def writecells(cells,nbelem,filew):
     for k in range(len(cells)):
         filew.write(str(cells[k][-1])+'\n')
 
-def writeVTK(Workdir,namefile,NNODES,NELEMS,coord,connec,result):
+def writeVTK(Workdir,namefile,NNODES,NELEMS,coord,connec,pointdata={None},celldata={None}):
     #
     filew = open(Workdir+'/MED_FILES/RESU_MEC/'+namefile+'.vtk','w')
     filew.write('# vtk DataFile Version 3.0 \n')
@@ -30,7 +30,6 @@ def writeVTK(Workdir,namefile,NNODES,NELEMS,coord,connec,result):
     # get elements for edges and triangles
     # count elements
     cells = []
-    cells2 = [] # for elem type 5
     for k in range(NELEMS):
         perele = []  
         nnee = len(connec[k])
@@ -39,27 +38,32 @@ def writeVTK(Workdir,namefile,NNODES,NELEMS,coord,connec,result):
             te = 3
         elif nnee == 3: #triangle
             te = 5
-            # for jut type 5
-            # perele2 = [nnee]+connec[k].tolist()+[te]
-            # cells2.append(perele2)
         elif nnee == 4: #triangle
             te = 9
         perele = [nnee]+connec[k].tolist()+[te]
         cells.append(perele)
     nbelem = get_all_elements_in_list_of_lists(cells)
-    nbelem2 = get_all_elements_in_list_of_lists(cells2)
 
     # write elements
     writecells(cells,nbelem,filew)
 
     # write results
-    filew.write('POINT_DATA '+str(NNODES)+'\n')
-    for key in result:
-        filew.write('SCALARS '+str(key)+ ' float 1 \n')
-        filew.write('LOOKUP_TABLE default \n')
-        for k in range(len(result[key])):
-            filew.write(str(result[key][k])+'\n')
-    filew.close()
+    if pointdata != {None}:
+        filew.write('POINT_DATA '+str(NNODES)+'\n')
+        for key in pointdata:
+            filew.write('SCALARS '+str(key)+ ' float 1 \n')
+            filew.write('LOOKUP_TABLE default \n')
+            for k in range(len(pointdata[key])):
+                filew.write(str(pointdata[key][k])+'\n')
+
+    if celldata != {None}:
+        filew.write('CELL_DATA '+str(NELEMS)+'\n')
+        for key in celldata:
+            filew.write('SCALARS '+str(key)+ ' float 1 \n')
+            filew.write('LOOKUP_TABLE default \n')
+            for k in range(len(celldata[key])):
+                filew.write(str(celldata[key][k])+'\n')
+        filew.close()
 
 def writeVTKSeries(Workdir,namefile,fps,loop,tstp,i):
     #Start the file 

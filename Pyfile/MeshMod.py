@@ -5,13 +5,16 @@
 # ------------------------------------------------------------------------------
 
 import gmsh
-import os
-import sys
 import math
 import json
 
-from Pyfile import readUNV
 # import readUNV
+from Pyfile import readUNV
+
+################################################################
+#                     Mesh module in GMSH                      #
+################################################################
+
 def getmindist(Sup, Inf, Csup, Cinf, capsule_thickness):
     dist = [None]*len(Sup)
     mindis = [None]*len(Sup)
@@ -617,10 +620,6 @@ def Capsule(jsonfile, Workdir,i):
         gmsh.initialize()
         gmsh.model.add("CAPSULE")
 
-        # # from contact
-        # with open(Workdir+'/dply.json') as DDYF:
-        #     DDY = json.load(DDYF)
-
         # TOP VOID A1
         (nodes, conec, elegroups, area) = readUNV.RUNVfile(Workdir+'/MED_FILES/DEF/A1D'+str(i-1)+'.unv')
         listcontA1=['C1', 'C2', 'C3']
@@ -636,10 +635,7 @@ def Capsule(jsonfile, Workdir,i):
         (Points_SplinesA2, Points_coordA2, free_pointsA2) = readUNV.contourspln(listcontA2, nodes, conec, elegroups)
         contour_orderA2 = readUNV.orderctr(listcontA2, Points_SplinesA2)
 
-        # dyA2 = DDY['DplyA2']
-
         dyA1, dyA2 = getmindist(Points_SplinesA1['C3'], Points_SplinesA2['C5'], Points_coordA1, Points_coordA2, dc)
-
 
         # definition of points A1:
         P=[]
@@ -831,7 +827,4 @@ def Capsule(jsonfile, Workdir,i):
         #     gmsh.fltk.run()        
 
         gmsh.finalize()
-
-# createA1('/home/kale/Documents/SimE2/TEST',1, 'G')
-# createA2('/home/kale/Documents/SimE2/TEST',1, 'G')
-# Capsule('/home/kale/Documents/SimE2/TEST',1)
+# END

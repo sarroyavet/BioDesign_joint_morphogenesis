@@ -2,19 +2,31 @@ import matplotlib.pyplot as plt
 import json
 
 def plotter(jsonfile, Workdir, i, jsonfileinf, labellist):
+    ####################################################################################
+    # graphic for the evlution of several variables
+    # jasonfile: case parameter information (size of the images)
+    # workdir: directory of the case
+    # i : the current step
+    # jsonfileinf: json file with the information of the plotted variables
+    # lablelist: list of varibles to print (check the *NO.comm to select
+    # the wanted information)
     # labellist [['D1', 'ylabel1'],['D2', 'ylabel2'],['D3', 'ylabel3']]
-    # Reading of the contact pressure at each GS
+    
+    # open the data of each step
     with open(jsonfileinf)as Dataf:
         Data = json.load(Dataf)
-    #
+    
+    # open the case parameters to define the size of the images
     with open(jsonfile) as f:
         ProblemData = json.load(f)
 
     dpi = ProblemData['Plotimg']['dpi']
     szx = ProblemData['Plotimg']['sizeX']
     szy = ProblemData['Plotimg']['sizeY']
+    
     # size converter
     cm = 1/2.54  # centimeters in inches
+
     # FOR EACH LABEL
     for ll in range(len(labellist)):
         fig, ax1 = plt.subplots(figsize=(szx*cm, szy*cm))
@@ -41,3 +53,4 @@ def plotter(jsonfile, Workdir, i, jsonfileinf, labellist):
         fig.tight_layout()  # otherwise the right y-label is slightly clipped
         plt.savefig(Workdir+'/MSHDAT/'+labellist[ll][1]+'.svg', format='svg', dpi=dpi)
         plt.close()
+# END

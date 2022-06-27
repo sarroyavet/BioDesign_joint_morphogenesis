@@ -1,5 +1,5 @@
 # OPTIMIZATION ALGORITHM
-# importing all the libraries necesary for the code
+# importing all the libraries necessary for the code
 
 import sys
 sys.path.append( '/home/salome_meca/V2019.0.3_universal/tools/Code_aster_stable-v144_smeca/lib/aster/Utilitai/' )
@@ -73,9 +73,9 @@ Vcap = ProblemData['Mat_param']['poisson_capsule'] # Poisson of the capsule
 Ec = Em / ProblemData['AD_param']['theta'] # Young of the capsule
 # thermal
 alpha = parameters['Alpha']
-lamb = 6 #thermal condutivity
+lamb = 6 #thermal conductivity
 # growth parameters
-lambdaa = ProblemData['AD_param']['lamda_mall_zone'] # determination of the length of the maleable zone
+lambdaa = ProblemData['AD_param']['lamda_mall_zone'] # determination of the length of the epiphysis zone
 aA1 = ProblemData['Geo_param']['a_sup'] # initial width of the piece
 aA2 = ProblemData['Geo_param']['a_inf'] # initial width of the piece
 mallzoneA1 = lambdaa*aA1 #size of the growth plate
@@ -87,7 +87,7 @@ temp_ref = 0.0 # reference temperature for the thermal deformation
 aexpfunc = ProblemData['AD_param']['aexpfunc']
 
 # Unit for the files
-U = 10 # Para configurar los ficheros
+U = 10 # counter of files
 #
 # definition of the file paths
 path_def_mesh = Workdir+'MED_FILES/DEF'
@@ -468,16 +468,11 @@ thermod = AFFE_MODELE(AFFE=(_F(MODELISATION=('AXIS', ),
                                GROUP_MA=('A1', 'A2',)),),
                       MAILLAGE= MAIL_TH)
 
-## Assign thermal material to thermal model
+# assign thermal material to thermal model
 fieldma2 = AFFE_MATERIAU(AFFE=(_F(GROUP_MA=('A2', 'A1',),
                                   MATER=(thermat))),
                          MODELE=thermod)
-#TEST
-# Notmp = []
-# for it in NoGO['C3']:
-#     Notmp.append(NormO[it])
-# NOCTlim = max(Notmp)#*(1+0.25)
-############# PERCENTAGE approach
+
 # Temperature assignation
 TempALL = []
 n=0
@@ -716,8 +711,11 @@ with open(Workdir+'/MSHDAT/CPDatH.json','w') as outfile:
     json.dump(maxCP, outfile)
 
 labellist =  [['dAA1', 'area1'], ['dAA2', 'area2'], ['dAAT', 'areaT'], ['NOlim', 'Noctlim']]
+
 #Plot the advancement
 Grph.plotter(jsonfile=Workdir+jsonfile,Workdir=Workdir, i=i,  jsonfileinf=Workdir+'/MSHDAT/CPDatH.json', labellist=labellist)
+
+
 #########################################################################
 #                                                                       #
 #                               Paraview                                #
@@ -746,7 +744,7 @@ vtkk.writeVTK(Workdir=Workdir,
               NELEMS=A1A2nelem1,
               coord=ALLCrd22,
               connec=A1A2connec,
-              result=res)
+              pointdata=res)
 
 vtkk.writeVTKSeries(Workdir = Workdir,
                     namefile= ProblemData['paraview']['growname'],

@@ -143,11 +143,6 @@ def contourspln(listnames, nodes, conec, elegroups):
     for i in range(len(nodes_to_points)):
         if nodes_to_points[i][2] == 1:
             free_points.append(nodes_to_points[i][1])
-   
-    # print(nodesORG_pergrp)
-    # print(Points_Splines)
-    # print(Points_coord)
-    # print(free_points)
     return(Points_Splines, Points_coord, free_points)
 
 # AREA
@@ -259,13 +254,4 @@ def RUNVfile(unvfile):
     area = getmsharea(nodes, conec)
     return(nodes, conec, elegroups, area)
 
-    # nodes: [xx,yy,zz]
-    # conec: [n1, n2, ... , nne]
-    # elegroups: {'group-name': [E1, E2, ... ,En ], } the option in which 
-    # we have entity and type of entity is comented, but also possible to get
-
-# (nodes, conec, elegroups, area)=RUNVfile('/home/kale/Documents/SimE2/TEST/MED_FILES/DEF/A1D0.unv')
-# listnames=['C1', 'C2', 'C3', 'C4']
-# (Points_Splines, Points_coord, free_points)=contourspln(listnames, nodes, conec, elegroups)
-# # print(orderctr(listctr=listnames,Points_Splines=Points_Splines))
-
+#END

@@ -5,9 +5,17 @@ import shutil
 import Pyfile.GraphicsAllCases as GrphAll
 from gen import gen
 
+################################################################
+# For creating the cases file folders and to running all of them
+# one after the other
+# filename: .csv file with all the information os each case
+# WorkdirCASES: Directory were the files will be created
+################################################################
+
 def runall(filename, WorkdirCASES):
   WorkdirCODES = os.path.dirname(os.path.realpath(__file__))
   listcases=[]
+
   with open(filename, 'r') as csvfile: 
     case = csv.DictReader(csvfile)
     for item in case:
@@ -80,10 +88,13 @@ def runall(filename, WorkdirCASES):
       
       iscase = 0
       casename = item['CASE']
-      if os.path.exists(WorkdirCASES+'/'+casename): #Check if the case folder exists 
+      # check if the case folder exists
+      if os.path.exists(WorkdirCASES+'/'+casename): 
+          # if the case folder exists prints 'taba'
           print('taba')
           iscase = 1
-          # shutil.rmtree(WorkdirCASES+'/'+casename)
+          # uncomment the line below to re do all the cases
+          # shutil.rmtree(WorkdirCASES+'/'+casename) 
       if iscase == 0:
         try: #creates the case folder
             os.makedirs(WorkdirCASES+'/'+casename)
@@ -95,7 +106,7 @@ def runall(filename, WorkdirCASES):
         jsonfileinf = WorkdirCASES+'/'+casename+'/'+casename+'.json'
         with open(jsonfileinf,'w') as outfile:
             json.dump(mydict, outfile, indent=4)
-        
+        # creates the file to run directly the Case, if necessary.
         runfilename = 'Run'+casename+'.py'
         with open(WorkdirCASES+'/'+casename+'/'+runfilename, 'w') as pyfile:
           pyfile.write('import os \n')
@@ -108,7 +119,7 @@ def runall(filename, WorkdirCASES):
         Workdir = WorkdirCASES+'/'+casename
         gen(casename+'.json',Workdir)
 
-      # graphic of all the cases
+      # graphic of all the cases for comparison purposes
       listcases.append(casename)
       xlabel = (item['xlabel'] if 'xlabel' in item.keys() else "Grow step")
       labellist =  [['CPN', 'Normcontact'],['CSHN', 'Normhydros'],['CVMN', 'Normvm']]

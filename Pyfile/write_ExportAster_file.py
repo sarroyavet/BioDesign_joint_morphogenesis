@@ -5,7 +5,7 @@ logging.info(psutil.virtual_memory())
 #90% of available meomry in MB
 TOTmem=psutil.virtual_memory()[1]/1024/1024*0.9
 
-def writeExport(Workdir,outputFile_ExportAster,aster_root,outputFile_Comm,outputFile_Messages,namemess,nameexport):
+def writeExport(outputFile_ExportAster,aster_root,outputFile_Comm,outputFile_Messages,namemess,nameexport):
     #lectura de parametros
     lines=[]
     lines=(
@@ -22,12 +22,12 @@ P lang en
 P mpi_nbcpu 1
 P mpi_nbnoeud 1
 P mode interactif
-P memjob 5120000
-P memory_limit 5000.0
+P memjob """+str(TOTmem*208)+"""
+P memory_limit """+str(TOTmem*2)+"""
 P time_limit 72000.0
 P tpsjob 1201
 
-A memjeveux 2500.0
+A memjeveux """+str(TOTmem)+"""
 A tpmax 72000.0
 F comm """+outputFile_Comm+""" D  1
 F mess """+outputFile_Messages+namemess+""".mess R  6

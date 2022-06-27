@@ -3,6 +3,8 @@ import matplotlib.pyplot as plt
 import csv
 import numpy as np
 
+
+# Class object that has all the information of the case
 class case:
     def __init__(self, name, Parent_directory):
         self.name = name
@@ -23,10 +25,22 @@ class case:
     
 
 def Comparativegraph (listcases,labellist, workdir, xlabel, szx = 30, szy = 10, dpi = 2000,csvfile='results_csv.csv'):
+    ################################################################
+    # All the cases evolution graph
+    # listcases: cases needed in the same graph
+    # labellist: list of varibles to print (check the *NO.comm to select
+    # the wanted information)
+    # labellist [['D1', 'ylabel1'],['D2', 'ylabel2'],['D3', 'ylabel3']]
+    # workdir: directory where all the case are
+    # xlabel : name for the xlabel
+    # szx: size of the figure in x
+    # szy: size of the figure in y
+    # csvfile: result file in format csv
+    ################################################################
+
     C = []
     maxxr = 0
     for item in listcases:
-        dire = workdir+'/'+item
         C.append(case(item, workdir))
         if maxxr < C[-1].geti():
             maxxr = C[-1].geti()
@@ -78,3 +92,5 @@ def Comparativegraph (listcases,labellist, workdir, xlabel, szx = 30, szy = 10, 
         writer = csv.DictWriter(cvs_file, fieldnames=colums)
         writer.writeheader()
         writer.writerows(mylisdic)
+
+# END
