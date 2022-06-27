@@ -1,3 +1,9 @@
+################################################################################################
+''' Developed by Kalenia Marquez Florez
+    Aix Marseille Univ, CNRS, ISM, Marseille, France
+    June 2022
+'''
+
 import matplotlib.pyplot as plt
 import json
 

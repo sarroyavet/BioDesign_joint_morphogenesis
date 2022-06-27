@@ -1,3 +1,8 @@
+################################################################################################
+''' Developed by Kalenia Marquez Florez
+    Aix Marseille Univ, CNRS, ISM, Marseille, France
+    June 2022
+'''
 import psutil
 import logging
 logging.info(psutil.virtual_memory())

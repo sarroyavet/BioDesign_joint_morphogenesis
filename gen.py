@@ -1,3 +1,12 @@
+################################################################################################
+''' Developed by Kalenia Marquez Florez
+    Aix Marseille Univ, CNRS, ISM, Marseille, France
+    June 2022
+
+    Script for a bio-inspired algorithm for the design of unilateral contact surfaces based 
+    on the morphogenesis of synovial joint principles.
+'''
+
 import os
 import json
 from subprocess import Popen

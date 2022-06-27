@@ -1,3 +1,9 @@
+################################################################################################
+''' Developed by Kalenia Marquez Florez
+    Aix Marseille Univ, CNRS, ISM, Marseille, France
+    June 2022
+'''
+
 def dirinfile(fileto,Workdirgen,fileout,workdir,jsonfile):
    ################################################################
    # function to pass the working directory to another file

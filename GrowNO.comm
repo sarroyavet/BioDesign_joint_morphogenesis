@@ -1,4 +1,11 @@
-# OPTIMIZATION ALGORITHM
+################################################################################################
+''' Developed by Kalenia Marquez Florez
+    Aix Marseille Univ, CNRS, ISM, Marseille, France
+    June 2022
+
+    Script for a bio-inspired algorithm for the design of unilateral contact surfaces based 
+    on the morphogenesis of synovial joint principles.
+'''
 # importing all the libraries necessary for the code
 
 import sys

@@ -1,3 +1,9 @@
+################################################################################################
+''' Developed by Kalenia Marquez Florez
+    Aix Marseille Univ, CNRS, ISM, Marseille, France
+    June 2022
+'''
+
 import numpy as np
 
 # ORGANIZE COUNTOURS FOR A CLOSE LOOP

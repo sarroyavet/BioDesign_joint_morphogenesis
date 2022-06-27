@@ -1,3 +1,9 @@
+################################################################################################
+''' Developed by Kalenia Marquez Florez
+    Aix Marseille Univ, CNRS, ISM, Marseille, France
+    June 2022
+'''
+
 def get_all_elements_in_list_of_lists(list1):
     count = 0
     for k in range(len(list1)):
