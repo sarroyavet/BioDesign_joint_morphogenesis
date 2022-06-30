@@ -1,10 +1,10 @@
 # BioDesign - script for morphogenesis-inspired design
 
-This project was developed at: Aix Marseille Univ, CNRS, ISM, Marseille, France. [CBI](http://79.94.73.69/index.html)
+This project was developed at: Aix Marseille Univ, CNRS, ISM, Marseille, France. [CBI](https://ism-cbi.duckdns.org/)
 
 This repository contains the implementation of a bio-inspired algorithm for the design of unilateral contact surfaces based on the morphogenesis of synovial joint principles. It is meant to be used with  [CODE_ASTER 14.4](https://code-aster.org/), [GMSH 4.9.3](https://gmsh.info/doc/texinfo/gmsh.html), and [Paraview 5.9](https://www.paraview.org/) (for result visualization).
 
-This Python module was created by Kalenia MARQUEZ-FLOREZ. It allows obtaining a bio-inspired contact surface profile for two Axi-symmetric bodies in unilateral contact.
+This Python module was created by Kalenia MARQUEZ-FLOREZ. It allows obtaining a bio-inspired contact surface profile for two axi-symmetric bodies in unilateral contact.
 
 ## Requisites
 
