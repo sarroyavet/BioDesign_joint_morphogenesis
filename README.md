@@ -30,4 +30,4 @@ Use:
 **NOTE**: Change the CODE_ASTER path in [mecaNO.comm](mecaNO.comm), [growNO.comm](growNO.comm) and [gen.py](gen.py) accordingly to your system
 
 ## Research
-The scripts of this repository were first used in [XXXX](xxxx)
+The scripts of this repository were first used in [Marquez-Florez, K., Arroyave-Tobon, S., & Linares, J. M. (2023). From biological morphogenesis to engineering joint design: a bio-inspired algorithm. Materials & Design, 225, 111466.](https://doi.org/10.1016/j.matdes.2022.111466)
