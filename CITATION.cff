@@ -1,16 +1,12 @@
-cff-version: 1.1.0
+cff-version: 1.2.0
 message: "If you use this software, please cite it as below."
 authors:
 - family-names: Marquez-Florez
   given-names: Kalenia
-orcid: https://orcid.org/0000-0001-6388-3208
-- family-names: Santiago
-  given-names: Arroyave-Tobon
-orcid: https://orcid.org/0000-0002-6704-0977
-- family-names: Jean-Marc
-  given-names: Linares
-orcid: https://orcid.org/0000-0001-7501-0383
-title:sarroyavet/BioDesign_joint_morphogenesis: Bio-inspired algorithm for the design of unilateral contact surfaces based on the morphogenesis of synovial joint principles:parameter optimisation with DOE
+  orcid: https://orcid.org/0000-0001-6388-3208
+title: "Bio-inspired algorithm for the design of unilateral contact surfaces based on the morphogenesis of synovial joint principles:parameter optimisation with DOE"
 version: V1.3
+identifiers:
+  - type: doi
+    value: 10.5281/zenodo.7584068
 date-released: 2025-06-20
-
